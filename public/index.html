@@ -150,7 +150,7 @@
       <div class="hint">Pick the whole photo archive, a category folder (e.g. Sneakers), or one product folder.</div>
       <div class="legend">
         <span><i class="dot"></i>To do</span>
-        <span><i class="dot ready"></i>Photos ready</span>
+        <span><i class="dot ready"></i>Restyled</span>
         <span><i class="dot done"></i>Uploaded</span>
         <span><i class="dot exists"></i>Already in Shopify</span>
       </div>
@@ -301,7 +301,7 @@ function loadFolder(files) {
         folder,
         name: folder,
         photos: list.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
-          .map((file, i) => ({ file, orig: URL.createObjectURL(file), styled: null, styledBlob: null, use: 'styled', include: true, busy: false, wait: '', error: '', cover: i === 0 })),
+          .map((file, i) => ({ file, orig: URL.createObjectURL(file), styled: null, styledBlob: null, use: 'original', include: true, busy: false, wait: '', error: '', cover: i === 0 })),
       }));
     const prod = { key: p.key, category: p.category, name: p.name, colours, state: 'todo', existing: null };
     prod.form = { ...defaultForm(prod), ...(store.get(`hs.form.${p.key}`) || {}) };
@@ -359,8 +359,8 @@ async function checkExisting() {
 
 // ---------- sidebar ----------
 function photoState(p) {
-  const all = p.colours.flatMap((c) => c.photos.filter((ph) => ph.include));
-  return all.length && all.every((ph) => ph.styled || ph.use === 'original');
+  // Restyling is optional: the dot only shows that some photos were restyled
+  return p.colours.some((c) => c.photos.some((ph) => ph.include && ph.styled && ph.use === 'styled'));
 }
 const todo = (p) => p.state !== 'done' && p.state !== 'exists';
 function renderList() {
@@ -427,6 +427,7 @@ function open(p) {
         <button class="small" id="styleAll">Restyle all</button></h3>
       <div style="margin-bottom:14px" id="notesWrap"><label for="notes">Notes for the AI photographer (optional)</label>
         <input id="notes" data-f="notes" value="${esc(f.notes)}" placeholder="e.g. show the pair at a 3/4 angle, keep the dust bag"></div>
+      <div class="hint" style="margin:-4px 0 12px">Restyling is optional. Photos upload exactly as they are unless you restyle them.</div>
       <div id="colours"></div>
     </div>
 
@@ -793,8 +794,6 @@ $('#uploadBtn').onclick = async () => {
   if (bad) return setMsg(bad, 'err');
   if (p.existing && !confirm(`"${p.form.title}" is already in Shopify. Upload another copy?`)) return;
   if (p.state === 'done' && !confirm('This product was already uploaded from here. Upload again?')) return;
-  const pending = p.colours.flatMap((c) => c.photos).filter((ph) => ph.include && !ph.styled && ph.use === 'styled');
-  if (pending.length && !confirm(`${pending.length} photo(s) aren't restyled yet. Upload their originals?`)) return;
 
   $('#uploadBtn').disabled = true;
   try {
