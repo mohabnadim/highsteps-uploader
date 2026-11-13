@@ -1,0 +1,28 @@
+name = "high-steps-uploader"
+main = "src/worker.js"
+compatibility_date = "2026-10-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+# Style reference photos are bundled into the worker as raw bytes
+# Cloudflare Images: background removal for the free "Clean cutout" mode
+[images]
+binding = "IMAGES"
+
+[[rules]]
+type = "Data"
+globs = ["**/*.jpg"]
+fallthrough = false
+
+[vars]
+SHOPIFY_STORE = "tdy741-b5.myshopify.com"
+SHOPIFY_API_VERSION = "2026-10"
+GEMINI_MODEL = "gemini-2.5-flash-image"
+
+# Secrets (set with `npx wrangler secret put NAME`, or in .dev.vars locally):
+#   STAFF_PASSWORD   password employees type to open the tool
+#   GEMINI_API_KEY   from aistudio.google.com/apikey (only needed for "AI reshoot")
+#   SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET   (Dev Dashboard app), or
+#   SHOPIFY_TOKEN    (older custom app with a static Admin API token)

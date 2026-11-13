@@ -1,0 +1,891 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>High Steps Uploader</title>
+<style>
+  :root {
+    --bg: #f4efe7; --panel: #fbf8f3; --ink: #2a2520; --muted: #8a8076;
+    --line: #e2d9cc; --ok: #4f7a52; --err: #a3413a; --warn: #a77a2c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }
+  h1, h2 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; margin: 0; }
+  h1 { font-size: 24px; } h2 { font-size: 22px; }
+  button { font: inherit; border-radius: 999px; padding: 8px 16px; cursor: pointer; border: 1px solid var(--ink); background: var(--ink); color: #fff; }
+  button.ghost { background: transparent; color: var(--ink); }
+  button.small { padding: 4px 10px; font-size: 13px; }
+  button:disabled { opacity: .4; cursor: default; }
+  input, select, textarea { width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); font: inherit; }
+  textarea { min-height: 90px; resize: vertical; }
+  label { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 5px; }
+  .hint { font-size: 13px; color: var(--muted); }
+
+  /* login */
+  #login { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  #login form { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 28px; width: 100%; max-width: 360px; display: grid; gap: 14px; }
+  #loginErr { color: var(--err); font-size: 14px; min-height: 1em; }
+
+  /* app */
+  #app { display: none; min-height: 100vh; grid-template-columns: 300px 1fr; }
+  #app.on { display: grid; }
+  @media (max-width: 860px) { #app.on { grid-template-columns: 1fr; } aside { max-height: 45vh; } }
+  aside { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  .side-top { padding: 18px 16px; border-bottom: 1px solid var(--line); display: grid; gap: 10px; }
+  .list { overflow-y: auto; flex: 1; padding: 8px 0 24px; }
+  .cat { padding: 14px 16px 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+  .item { display: flex; align-items: center; gap: 8px; padding: 7px 16px; cursor: pointer; font-size: 14px; }
+  .item:hover { background: #fff; }
+  .item.sel { background: #fff; box-shadow: inset 3px 0 0 var(--ink); }
+  .item .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); flex: none; }
+  .dot.ready { background: var(--warn); } .dot.done { background: var(--ok); } .dot.exists { background: #6b8bb5; }
+  input[type=checkbox] { width: auto; margin: 0; flex: none; accent-color: var(--ink); cursor: pointer; }
+  .cat { display: flex; align-items: center; gap: 8px; }
+  .bulk { display: grid; gap: 8px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .bulk-row { display: flex; gap: 8px; align-items: center; }
+  .bulk-row select { flex: 1; } .bulk-row button { flex: 1.4; }
+  .chk { display: inline-flex; align-items: center; gap: 8px; margin: 0; flex: 1; cursor: pointer; text-transform: none; letter-spacing: 0; font-size: 14px; color: inherit; }
+  .footer[hidden] { display: none; }
+  #bulkMsg.err { color: var(--err); } #bulkMsg.ok { color: var(--ok); }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+
+  main { padding: 28px 24px 120px; min-width: 0; }
+  .empty { color: var(--muted); text-align: center; margin-top: 18vh; }
+  .head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+  .badge { font-size: 12px; padding: 2px 10px; border-radius: 999px; background: #e6eef8; color: #3d5f8c; }
+  .badge a { color: inherit; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin-top: 18px; }
+  .card > h3 { margin: 0 0 14px; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 500; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .card > h3 .sp { flex: 1; }
+  .card > h3 select { width: auto; padding: 4px 8px; font-size: 13px; text-transform: none; letter-spacing: 0; }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  @media (max-width: 640px) { .g2, .g3 { grid-template-columns: 1fr; } }
+  .full { grid-column: 1 / -1; }
+
+  .colour { margin-bottom: 18px; }
+  .colour:last-child { margin-bottom: 0; }
+  .colour-name { font-weight: 500; margin-bottom: 8px; display: flex; gap: 10px; align-items: center; }
+  .colour-name input { max-width: 220px; padding: 5px 9px; font-size: 14px; }
+  .photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .ph { background: #fff; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .ph.off { opacity: .45; }
+  .ph .img { aspect-ratio: 4 / 5; position: relative; background: #f7f3ec; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; }
+  .ph .img .wait { font-size: 12px; color: var(--muted); text-align: center; padding: 0 8px; }
+  .ph img { width: 100%; height: 100%; object-fit: cover; display: block; cursor: zoom-in; }
+  .ph .tag { position: absolute; top: 6px; left: 6px; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; background: rgba(255,255,255,.88); padding: 1px 7px; border-radius: 999px; color: var(--muted); }
+  .ph .tag.cover { left: auto; right: 6px; background: var(--ink); color: #fff; }
+  .ph .ctl { display: flex; gap: 4px; padding: 6px; flex-wrap: wrap; }
+  .ph .ctl button { padding: 3px 8px; font-size: 12px; flex: 1; }
+  .ph .err { color: var(--err); font-size: 12px; padding: 0 6px 6px; }
+  .spin { width: 20px; height: 20px; border: 2px solid var(--line); border-top-color: var(--ink); border-radius: 50%; animation: spin .9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  table.stock { border-collapse: collapse; width: 100%; font-size: 14px; }
+  .stock-wrap { overflow-x: auto; }
+  table.stock th, table.stock td { padding: 5px; text-align: center; }
+  table.stock th { font-weight: 500; color: var(--muted); font-size: 12px; }
+  table.stock td:first-child, table.stock th:first-child { text-align: left; white-space: nowrap; padding-right: 12px; }
+  table.stock input { width: 58px; padding: 5px; text-align: center; }
+
+  .footer { position: fixed; bottom: 0; left: 300px; right: 0; background: rgba(251,248,243,.96); border-top: 1px solid var(--line); padding: 12px 24px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; backdrop-filter: blur(6px); }
+  @media (max-width: 860px) { .footer { left: 0; } }
+  .footer select { width: auto; }
+  #msg { flex: 1; font-size: 14px; min-width: 200px; }
+  #msg.err { color: var(--err); } #msg.ok { color: var(--ok); }
+  #msg a { color: inherit; }
+  .lightbox { position: fixed; inset: 0; background: rgba(20,17,14,.85); display: none; align-items: center; justify-content: center; padding: 24px; z-index: 10; cursor: zoom-out; }
+  .lightbox.open { display: flex; }
+  .lightbox img { max-width: 100%; max-height: 100%; border-radius: 6px; }
+
+  /* studio editor */
+  .studio { position: fixed; inset: 0; background: rgba(20,17,14,.55); z-index: 20; display: none; padding: 20px; }
+  .studio.open { display: flex; align-items: center; justify-content: center; }
+  .studio .box { background: var(--panel); border-radius: 14px; width: min(1180px, 100%); height: min(860px, 100%); display: grid; grid-template-columns: 1fr 300px; overflow: hidden; }
+  .studio .stage { position: relative; display: flex; align-items: center; justify-content: center; padding: 24px; min-height: 0; background: #ede7de; }
+  .studio canvas { max-width: 100%; max-height: 100%; box-shadow: 0 18px 40px -24px rgba(42,37,32,.45); cursor: grab; touch-action: none; border-radius: 4px; }
+  .studio canvas:active { cursor: grabbing; }
+  .studio .stage .hint { position: absolute; left: 24px; right: 24px; bottom: 8px; text-align: center; }
+  .studio .side { border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  .studio .ctrls { overflow-y: auto; padding: 18px; flex: 1; }
+  .studio .ctrls h4 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 500; }
+  .studio .grp { border-bottom: 1px solid var(--line); padding-bottom: 14px; margin-bottom: 14px; }
+  .studio .row { margin-bottom: 8px; }
+  .studio .row .lab { display: flex; justify-content: space-between; font-size: 13px; }
+  .studio .row .lab span:last-child { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .studio input[type=range] { width: 100%; padding: 0; border: 0; background: none; accent-color: var(--ink); }
+  .studio .swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+  .studio .sw { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line); padding: 0; cursor: pointer; }
+  .studio .sw.on { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .studio .chk { font-size: 13px; margin-bottom: 10px; }
+  .studio .acts { display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 18px; border-top: 1px solid var(--line); }
+  .studio .acts button { flex: 1; padding: 7px 10px; font-size: 13px; }
+  .studio #stCompare.on { background: var(--ink); color: #fff; }
+  @media (max-width: 860px) { .studio .box { grid-template-columns: 1fr; grid-template-rows: 55% 45%; } }
+</style>
+</head>
+<body>
+
+<section id="login">
+  <form id="loginForm">
+    <h1>High Steps Uploader</h1>
+    <div>
+      <label for="pw">Staff password</label>
+      <input id="pw" type="password" autocomplete="current-password" required>
+    </div>
+    <button type="submit">Open</button>
+    <div id="loginErr"></div>
+  </form>
+</section>
+
+<div id="app">
+  <aside>
+    <div class="side-top">
+      <h1>High Steps Uploader</h1>
+      <button id="pick">Choose product folder…</button>
+      <input id="dirInput" type="file" webkitdirectory multiple hidden>
+      <div class="hint">Pick the whole photo archive, a category folder (e.g. Sneakers), or one product folder.</div>
+      <div class="legend">
+        <span><i class="dot"></i>To do</span>
+        <span><i class="dot ready"></i>Photos ready</span>
+        <span><i class="dot done"></i>Uploaded</span>
+        <span><i class="dot exists"></i>Already in Shopify</span>
+      </div>
+      <div class="bulk" id="bulk" hidden>
+        <div class="bulk-row"><label class="chk"><input type="checkbox" id="pickAll"> Select all to do</label></div>
+        <div class="bulk-row">
+          <select id="bulkStatus"><option value="DRAFT">As draft</option><option value="ACTIVE">Publish now</option></select>
+          <button id="bulkBtn" disabled>Upload selected</button>
+        </div>
+        <div id="bulkMsg" class="hint"></div>
+      </div>
+    </div>
+    <div class="list" id="list"></div>
+  </aside>
+
+  <main id="main"><p class="empty">Choose a folder to start.</p></main>
+
+  <div class="footer" id="footer" hidden>
+    <select id="status">
+      <option value="DRAFT">Save as draft</option>
+      <option value="ACTIVE">Publish now</option>
+    </select>
+    <button id="uploadBtn">Upload to Shopify</button>
+    <span id="msg"></span>
+  </div>
+</div>
+
+<div class="lightbox" id="lightbox"><img alt=""></div>
+
+<div class="studio" id="studio">
+  <div class="box">
+    <div class="stage">
+      <canvas id="stCanvas"></canvas>
+      <div class="hint">Drag to move · scroll to resize · double-click a slider to reset it</div>
+    </div>
+    <div class="side">
+      <div class="ctrls">
+        <div class="grp"><h4>Backdrop · all photos</h4><div class="swatches" id="stSwatches"></div></div>
+        <div class="grp"><h4>Placement</h4>
+          <div class="row"><div class="lab"><span>Size</span><span id="sv-scale"></span></div><input type="range" id="ss-scale"></div>
+          <div class="row"><div class="lab"><span>Left / right</span><span id="sv-offX"></span></div><input type="range" id="ss-offX"></div>
+          <div class="row"><div class="lab"><span>Up / down</span><span id="sv-offY"></span></div><input type="range" id="ss-offY"></div>
+          <div class="row"><div class="lab"><span>Shadow</span><span id="sv-shadow"></span></div><input type="range" id="ss-shadow"></div>
+        </div>
+        <div class="grp" style="border:0"><h4>Light &amp; colour</h4>
+          <label class="chk"><input type="checkbox" id="ss-auto"> Auto tone (brightness only)</label>
+          <div class="row"><div class="lab"><span>Exposure</span><span id="sv-exposure"></span></div><input type="range" id="ss-exposure"></div>
+          <div class="row"><div class="lab"><span>Warmth</span><span id="sv-warmth"></span></div><input type="range" id="ss-warmth"></div>
+          <div class="row"><div class="lab"><span>Contrast</span><span id="sv-contrast"></span></div><input type="range" id="ss-contrast"></div>
+          <div class="row"><div class="lab"><span>Saturation</span><span id="sv-saturation"></span></div><input type="range" id="ss-saturation"></div>
+          <div class="row"><div class="lab"><span>Edge clean-up</span><span id="sv-edge"></span></div><input type="range" id="ss-edge"></div>
+        </div>
+      </div>
+      <div class="acts">
+        <button class="ghost" id="stCompare">Hold: original</button>
+        <button class="ghost" id="stAll" title="Copy this light, colour and shadow to every photo of this product">Look → all photos</button>
+        <button class="ghost" id="stReset">Reset</button>
+      </div>
+      <div class="acts" style="border-top:0;padding-top:0">
+        <button class="ghost" id="stCancel">Cancel</button>
+        <button id="stSave">Save photo</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="studio.js"></script>
+
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+
+const CATEGORY_NAMES = ['Bags', 'Belts', 'Loafers & Shoes', 'Sneakers', 'Shoes', 'Loafers', 'Accessories', 'Wallets', 'Sandals', 'Boots'];
+const BRANDS = ['Alexander McQueen', 'Brunello Cucinelli', 'Bottega Veneta', 'Balenciaga', 'Burberry', 'Celine', 'Chanel', 'Christian Louboutin', 'Dior', 'Dolce & Gabbana', 'Fendi', 'Ferragamo', 'Givenchy', 'Golden Goose', 'Gucci', 'Hermes', 'Loewe', 'Loro Piana', 'Louis Vuitton', 'Marc Jacobs', 'Miu Miu', 'Moncler', 'Off-White', 'Prada', 'Saint Laurent', 'Tod\'s', 'Tom Ford', 'Valentino', 'Versace', 'Zegna'];
+const SHOE_CATS = /sneaker|shoe|loafer|boot|sandal/i;
+// Starting prices in EGP by category; staff can change them per product
+const DEFAULT_PRICES = [[/belt/i, 3500], [/bag/i, 9000], [SHOE_CATS, 8500]];
+const FIT_SIZES = { men: '41-45', women: '37-40' };
+
+let password = sessionStorage.getItem('hs.pw') || '';
+let aiReshoot = false;
+let products = [];  // { key, category, name, colours: [{ folder, name, photos: [] }], form, state, existing }
+let current = null;
+
+// ---------- API ----------
+async function api(path, opts = {}) {
+  const res = await fetch(path, { ...opts, headers: { 'x-staff-password': password, ...(opts.headers || {}) } });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+$('#loginForm').onsubmit = async (e) => {
+  e.preventDefault();
+  password = $('#pw').value;
+  try { await login(); } catch (err) { $('#loginErr').textContent = err.message; }
+};
+async function login() {
+  const r = await api('/api/login', { method: 'POST' });
+  aiReshoot = r.aiReshoot;
+  sessionStorage.setItem('hs.pw', password);
+  $('#login').style.display = 'none';
+  $('#app').classList.add('on');
+  if (r.shopifyError) $('#main').innerHTML = `<p class="empty" style="color:var(--err)">Shopify isn't connected: ${esc(r.shopifyError)}</p>`;
+}
+if (password) login().catch(() => sessionStorage.removeItem('hs.pw'));
+
+// ---------- folder parsing ----------
+$('#pick').onclick = () => $('#dirInput').click();
+$('#dirInput').onchange = (e) => { loadFolder([...e.target.files]); e.target.value = ''; };
+
+function loadFolder(files) {
+  const imgs = files.filter((f) => /\.(jpe?g|png|webp|heic)$/i.test(f.name) && !f.webkitRelativePath.includes('/_') && !f.name.startsWith('.'));
+  if (!imgs.length) return alert('No photos found in that folder.');
+  const paths = imgs.map((f) => f.webkitRelativePath.split('/'));
+  // Work out which level was picked: archive root, a category, or a single product
+  const root = paths[0][0];
+  const second = new Set(paths.map((p) => p[1]));
+  let level;
+  if (CATEGORY_NAMES.some((c) => c.toLowerCase() === root.toLowerCase())) level = 'category';
+  else if ([...second].some((s) => CATEGORY_NAMES.some((c) => c.toLowerCase() === s.toLowerCase()))) level = 'archive';
+  else if (paths.every((p) => p.length <= 3)) level = 'product';
+  else level = paths.some((p) => p.length >= 5) ? 'archive' : 'category';
+
+  const map = new Map();
+  imgs.forEach((file, i) => {
+    let p = paths[i];
+    if (level === 'archive') p = p.slice(1);
+    else if (level === 'product') p = ['Uncategorised', ...p];
+    // p = [category, product, (colour), file]
+    const [category, name] = p;
+    const colour = p.length >= 4 ? p[2] : '';
+    const key = `${category}/${name}`;
+    if (!map.has(key)) map.set(key, { key, category, name, colours: new Map() });
+    const prod = map.get(key);
+    if (!prod.colours.has(colour)) prod.colours.set(colour, []);
+    prod.colours.get(colour).push(file);
+  });
+
+  products = [...map.values()].map((p) => {
+    const colours = [...p.colours.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([folder, list]) => ({
+        folder,
+        name: folder,
+        photos: list.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+          .map((file, i) => ({ file, orig: URL.createObjectURL(file), styled: null, styledBlob: null, use: 'styled', include: true, busy: false, wait: '', error: '', cover: i === 0 })),
+      }));
+    const prod = { key: p.key, category: p.category, name: p.name, colours, state: 'todo', existing: null };
+    prod.form = { ...defaultForm(prod), ...(store.get(`hs.form.${p.key}`) || {}) };
+    if (store.get(`hs.done.${p.key}`)) { prod.state = 'done'; prod.uploadedUrl = store.get(`hs.done.${p.key}`); }
+    return prod;
+  }).sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+
+  $('#bulk').hidden = false;
+  renderList();
+  current = null;
+  $('#main').innerHTML = `<p class="empty">${products.length} products found. Pick one on the left.</p>`;
+  $('#footer').hidden = true;
+  checkExisting();
+}
+
+function defaultForm(prod) {
+  const norm = (s) => s.toLowerCase().replace(/&/g, '').replace(/\s+/g, ' ');
+  const clean = norm(prod.name.replace(/\s+-\s+.*/, ''));
+  const brand = BRANDS.find((b) => clean.startsWith(norm(b)))
+    || BRANDS.find((b) => clean.startsWith(norm(b).split(' ')[0] + ' '));
+  const fit = /\b(women|womens|woman|ladies|lady)\b/i.test(prod.name) ? 'women' : 'men';
+  return {
+    title: prod.name.replace(/Dolce Gabbana/i, 'Dolce & Gabbana'),
+    vendor: brand || '',
+    productType: prod.category,
+    description: '',
+    tags: prod.category,
+    price: String(DEFAULT_PRICES.find(([re]) => re.test(prod.category))?.[1] ?? ''),
+    compareAtPrice: '',
+    fit,
+    sizes: SHOE_CATS.test(prod.category) ? FIT_SIZES[fit] : '',
+    stock: {},
+    notes: '',
+  };
+}
+
+async function checkExisting() {
+  for (const p of products) {
+    try {
+      const id = p.state === 'done' ? (p.uploadedUrl || '').split('/').pop() : '';
+      const r = await api(`/api/exists?title=${encodeURIComponent(p.form.title)}${id ? `&id=${encodeURIComponent(id)}` : ''}`);
+      if (p.state === 'done' && r.byId) continue;
+      if (p.state === 'done') {
+        // Uploaded from here but deleted in Shopify since: back to to-do
+        p.state = 'todo'; p.uploadedUrl = null;
+        try { localStorage.removeItem(`hs.done.${p.key}`); } catch {}
+      }
+      p.existing = r.found ? r : null;
+      if (r.found) p.state = 'exists';
+    } catch {}
+    renderList();
+    if (current === p) renderBadge();
+  }
+}
+
+// ---------- sidebar ----------
+function photoState(p) {
+  const all = p.colours.flatMap((c) => c.photos.filter((ph) => ph.include));
+  return all.length && all.every((ph) => ph.styled || ph.use === 'original');
+}
+const todo = (p) => p.state !== 'done' && p.state !== 'exists';
+function renderList() {
+  let html = '', cat = null;
+  for (const p of products) {
+    if (p.category !== cat) {
+      cat = p.category;
+      const inCat = products.filter((x) => x.category === cat && todo(x));
+      const all = inCat.length && inCat.every((x) => x.picked);
+      html += `<div class="cat"><input type="checkbox" data-cat="${esc(cat)}" ${all ? 'checked' : ''} ${inCat.length ? '' : 'disabled'} title="Select this category">${esc(cat)}</div>`;
+    }
+    const dot = p.state === 'done' ? 'done' : p.state === 'exists' ? 'exists' : photoState(p) ? 'ready' : '';
+    html += `<div class="item ${current === p ? 'sel' : ''}" data-key="${esc(p.key)}"><input type="checkbox" ${p.picked ? 'checked' : ''}><i class="dot ${dot}"></i><span class="t">${esc(p.name)}</span></div>`;
+  }
+  $('#list').innerHTML = html;
+  $('#list').querySelectorAll('.item').forEach((el) => {
+    const p = products.find((x) => x.key === el.dataset.key);
+    el.onclick = (e) => { if (e.target.type !== 'checkbox') open(p); };
+    $('input', el).onchange = (e) => { p.picked = e.target.checked; renderList(); };
+  });
+  $('#list').querySelectorAll('[data-cat]').forEach((el) => (el.onchange = () => {
+    products.filter((x) => x.category === el.dataset.cat && todo(x)).forEach((x) => (x.picked = el.checked));
+    renderList();
+  }));
+  const picked = products.filter((p) => p.picked).length;
+  const open_ = products.filter(todo);
+  $('#pickAll').checked = open_.length > 0 && open_.every((p) => p.picked);
+  $('#bulkBtn').textContent = picked ? `Upload ${picked}` : 'Upload selected';
+  $('#bulkBtn').disabled = !picked || bulkBusy;
+}
+$('#pickAll').onchange = (e) => { products.filter(todo).forEach((p) => (p.picked = e.target.checked)); renderList(); };
+
+// ---------- editor ----------
+function sizesOf(form) {
+  const s = form.sizes.trim();
+  if (!s) return [];
+  const range = s.match(/^(\d+(?:\.5)?)\s*-\s*(\d+(?:\.5)?)$/);
+  if (range) {
+    const out = [];
+    for (let n = Number(range[1]); n <= Number(range[2]); n += 1) out.push(String(n));
+    return out;
+  }
+  return s.split(/[,\s]+/).map((x) => x.trim()).filter(Boolean);
+}
+
+function save(p) { store.set(`hs.form.${p.key}`, p.form); }
+const styleMode = () => (aiReshoot && store.get('hs.mode') === 'ai' ? 'ai' : 'cutout');
+
+function open(p) {
+  current = p;
+  renderList();
+  const f = p.form;
+  $('#main').innerHTML = `
+    <div class="head"><h2>${esc(p.name)}</h2><span id="badge"></span></div>
+    <div class="hint">${esc(p.category)} · ${p.colours.reduce((n, c) => n + c.photos.length, 0)} photos${p.colours.length > 1 ? ` · ${p.colours.length} colours` : ''}</div>
+
+    <div class="card">
+      <h3>Photos <span class="sp"></span>
+        <select id="mode" title="How photos are restyled">
+          <option value="cutout">Clean cutout (free)</option>
+          ${aiReshoot ? '<option value="ai">AI reshoot (Gemini)</option>' : ''}
+        </select>
+        <select id="backdrop" title="Backdrop colour for clean cutouts">${Studio.BACKDROPS.map((b) => `<option value="${b.color}">${esc(b.name)}</option>`).join('')}</select>
+        <button class="small" id="styleAll">Restyle all</button></h3>
+      <div style="margin-bottom:14px" id="notesWrap"><label for="notes">Notes for the AI photographer (optional)</label>
+        <input id="notes" data-f="notes" value="${esc(f.notes)}" placeholder="e.g. show the pair at a 3/4 angle, keep the dust bag"></div>
+      <div id="colours"></div>
+    </div>
+
+    <div class="card">
+      <h3>Details</h3>
+      <div class="g2">
+        <div class="full"><label>Title</label><input data-f="title" value="${esc(f.title)}"></div>
+        <div><label>Brand</label><input data-f="vendor" value="${esc(f.vendor)}" list="brands"></div>
+        <div><label>Category</label><input data-f="productType" value="${esc(f.productType)}"></div>
+        <div class="full"><label>Description</label><textarea data-f="description" placeholder="Material, fit, what's included…">${esc(f.description)}</textarea></div>
+        <div class="full"><label>Tags (comma separated)</label><input data-f="tags" value="${esc(f.tags)}"></div>
+      </div>
+      <datalist id="brands">${BRANDS.map((b) => `<option value="${esc(b)}">`).join('')}</datalist>
+    </div>
+
+    <div class="card">
+      <h3>Price & stock${SHOE_CATS.test(p.category) ? `
+        <select id="fit"><option value="men">Men · EU 41–45</option><option value="women">Women · EU 37–40</option></select>` : ''}</h3>
+      <div class="g3">
+        <div><label>Price</label><input data-f="price" inputmode="decimal" value="${esc(f.price)}" placeholder="EGP"></div>
+        <div><label>Compare-at price</label><input data-f="compareAtPrice" inputmode="decimal" value="${esc(f.compareAtPrice)}" placeholder="optional"></div>
+        <div><label>Sizes</label><input data-f="sizes" value="${esc(f.sizes)}" placeholder="39-45 or 40, 41, 42 · empty = one size"></div>
+      </div>
+      <div class="stock-wrap" style="margin-top:16px" id="stock"></div>
+    </div>`;
+
+  $('#main').querySelectorAll('[data-f]').forEach((el) => {
+    el.oninput = () => {
+      f[el.dataset.f] = el.value;
+      save(p);
+      if (el.dataset.f === 'sizes') renderStock(p);
+    };
+  });
+  if ($('#fit')) {
+    $('#fit').value = f.fit || 'men';
+    $('#fit').onchange = () => {
+      f.fit = $('#fit').value;
+      f.sizes = FIT_SIZES[f.fit];
+      $('[data-f="sizes"]').value = f.sizes;
+      save(p);
+      renderStock(p);
+    };
+  }
+  $('#mode').value = styleMode();
+  $('#mode').onchange = (e) => { store.set('hs.mode', e.target.value); syncModeUi(); };
+  $('#backdrop').value = backdrop();
+  $('#backdrop').onchange = (e) => setBackdrop(e.target.value);
+  syncModeUi();
+  $('#styleAll').onclick = () => styleAll(p);
+  renderColours(p);
+  renderStock(p);
+  renderBadge();
+  $('#footer').hidden = false;
+  setMsg('');
+  $('#uploadBtn').disabled = false;
+}
+
+function renderBadge() {
+  const p = current, el = $('#badge');
+  if (!el) return;
+  if (p.state === 'done') el.innerHTML = `<span class="badge" style="background:#e3eee3;color:var(--ok)">Uploaded · <a href="${esc(p.uploadedUrl)}" target="_blank" rel="noopener">open in Shopify</a></span>`;
+  else if (p.existing) el.innerHTML = `<span class="badge">Already in Shopify (${esc(p.existing.status.toLowerCase())}) · <a href="${esc(p.existing.url)}" target="_blank" rel="noopener">open</a></span>`;
+  else el.innerHTML = '';
+}
+
+function renderColours(p) {
+  const wrap = $('#colours');
+  wrap.innerHTML = '';
+  p.colours.forEach((c) => {
+    const div = document.createElement('div');
+    div.className = 'colour';
+    div.innerHTML = (p.colours.length > 1 || c.folder)
+      ? `<div class="colour-name"><span class="hint">Colour</span><input value="${esc(c.name)}"></div>` : '';
+    const inp = $('input', div);
+    if (inp) inp.oninput = () => { c.name = inp.value; renderStock(p); };
+    const grid = document.createElement('div');
+    grid.className = 'photos';
+    c.photos.forEach((ph) => grid.appendChild(photoCard(p, c, ph)));
+    div.appendChild(grid);
+    wrap.appendChild(div);
+  });
+}
+
+function photoCard(p, c, ph) {
+  const el = document.createElement('div');
+  el.className = 'ph' + (ph.include ? '' : ' off');
+  const showStyled = ph.styled && ph.use === 'styled';
+  const src = showStyled ? ph.styled : ph.orig;
+  el.innerHTML = `
+    <div class="img">${ph.busy ? `<div class="spin"></div><div class="wait">${esc(ph.wait)}</div>` : `<img src="${src}" alt="">`}
+      <span class="tag">${showStyled ? 'Restyled' : 'Original'}</span>
+      ${ph.cover ? '<span class="tag cover">Cover</span>' : ''}</div>
+    <div class="ctl">
+      <button class="small" data-a="style" ${ph.busy ? 'disabled' : ''}>${ph.styled ? 'Redo' : 'Restyle'}</button>
+      ${ph.cut && !ph.busy ? '<button class="small ghost" data-a="adjust">Adjust</button>' : ''}
+      ${ph.styled ? `<button class="small ghost" data-a="swap">${ph.use === 'styled' ? 'Use original' : 'Use restyled'}</button>` : ''}
+      ${ph.cover ? '' : '<button class="small ghost" data-a="cover">Cover</button>'}
+      <button class="small ghost" data-a="skip">${ph.include ? 'Skip' : 'Include'}</button>
+    </div>
+    ${ph.error ? `<div class="err">${esc(ph.error)}</div>` : ''}`;
+  const img = $('img', el);
+  if (img) img.onclick = () => zoom(src);
+  el.querySelectorAll('[data-a]').forEach((b) => (b.onclick = () => {
+    const a = b.dataset.a;
+    if (a === 'style') return restyle(p, ph);
+    if (a === 'adjust') return openStudio(p, ph);
+    if (a === 'swap') ph.use = ph.use === 'styled' ? 'original' : 'styled';
+    if (a === 'cover') c.photos.forEach((x) => (x.cover = x === ph));
+    if (a === 'skip') ph.include = !ph.include;
+    refreshPhoto(p);
+  }));
+  return el;
+}
+
+function refreshPhoto(p) {
+  if (current === p) renderColours(p);
+  renderList();
+}
+
+// ---------- image helpers ----------
+async function fileToCanvas(blob, maxSide) {
+  const bmp = await createImageBitmap(blob, { imageOrientation: 'from-image' });
+  const s = Math.min(1, maxSide / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  return c;
+}
+const canvasToBlob = (c, q = 0.92) => new Promise((res) => c.toBlob(res, 'image/jpeg', q));
+async function fileToJpeg(blob, maxSide, quality = 0.9) { return canvasToBlob(await fileToCanvas(blob, maxSide), quality); }
+async function blobToB64(blob) {
+  const buf = new Uint8Array(await blob.arrayBuffer());
+  let s = '';
+  for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+// Cover-fit into an exact 1600x2000 JPEG
+async function toFinal(b64, mime) {
+  const blob = await (await fetch(`data:${mime};base64,${b64}`)).blob();
+  const bmp = await createImageBitmap(blob);
+  const W = 1600, H = 2000, s = Math.max(W / bmp.width, H / bmp.height);
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(bmp, (W - bmp.width * s) / 2, (H - bmp.height * s) / 2, bmp.width * s, bmp.height * s);
+  return canvasToBlob(c);
+}
+
+// ---------- clean cutout (free) ----------
+// Cloudflare Images removes the background on the server; studio.js then places the product
+// on the High Steps backdrop with a floor shadow. Product pixels are never repainted.
+// The cut-out is kept on the photo so it can be adjusted later without cutting again.
+const backdrop = () => store.get('hs.backdrop') || Studio.BACKDROPS[0].color;
+function syncModeUi() {
+  $('#notesWrap').hidden = styleMode() !== 'ai';
+  $('#backdrop').hidden = styleMode() === 'ai';
+}
+async function cutout(ph, onWait) {
+  onWait('Cutting out…');
+  const res = await fetch('/api/cutout', {
+    method: 'POST',
+    headers: { 'x-staff-password': password, 'content-type': 'image/jpeg' },
+    body: await fileToJpeg(ph.file, 2048, 0.95),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Cutout failed (${res.status})`);
+  }
+  // The returned PNG has the background made transparent
+  const t = Studio.trim(await fileToCanvas(await res.blob(), 4096));
+  ph.cut = t.canvas; ph.base = t.base;
+  ph.look ||= { ...Studio.LOOK, ...(store.get('hs.look') || {}) };
+  ph.place ||= { ...Studio.PLACE };
+  return Studio.toBlob(ph, backdrop());
+}
+
+// Re-render an already cut-out photo after its look, placement or the backdrop changed
+async function recompose(ph) {
+  if (!ph.cut) return;
+  ph.styledBlob = await Studio.toBlob(ph, backdrop());
+  if (ph.styled) URL.revokeObjectURL(ph.styled);
+  ph.styled = URL.createObjectURL(ph.styledBlob);
+}
+
+async function setBackdrop(color) {
+  store.set('hs.backdrop', color);
+  if ($('#backdrop')) $('#backdrop').value = color;
+  const p = current;
+  if (!p) return;
+  for (const ph of p.colours.flatMap((c) => c.photos)) if (ph.cut && ph.use === 'styled') await recompose(ph);
+  refreshPhoto(p);
+}
+
+// ---------- studio editor ----------
+const ST_SLIDERS = [
+  ['scale', 'place', 0.5, 1.4, 0.01, (v) => Math.round(v * 100) + '%'],
+  ['offX', 'place', -0.25, 0.25, 0.005, (v) => (v * 100).toFixed(0)],
+  ['offY', 'place', -0.25, 0.25, 0.005, (v) => (v * 100).toFixed(0)],
+  ['shadow', 'look', 0, 2, 0.05, (v) => Math.round(v * 100) + '%'],
+  ['exposure', 'look', -1, 1, 0.02, (v) => (v > 0 ? '+' : '') + v.toFixed(2)],
+  ['warmth', 'look', -1, 1, 0.02, (v) => (v > 0 ? '+' : '') + Math.round(v * 100)],
+  ['contrast', 'look', -0.5, 0.5, 0.01, (v) => (v > 0 ? '+' : '') + Math.round(v * 100)],
+  ['saturation', 'look', -0.6, 0.6, 0.01, (v) => (v > 0 ? '+' : '') + Math.round(v * 100)],
+  ['edge', 'look', 0, 1, 0.02, (v) => Math.round(v * 100)],
+];
+let st = null; // { p, ph, draft, orig, comparing, bg }
+function stDraw() {
+  if (!st) return;
+  cancelAnimationFrame(st.raf);
+  st.raf = requestAnimationFrame(() => {
+    const cv = $('#stCanvas');
+    if (st.comparing && st.orig) {
+      cv.width = st.orig.width; cv.height = st.orig.height;
+      cv.getContext('2d').drawImage(st.orig, 0, 0);
+    } else Studio.render(st.draft, cv, st.bg);
+  });
+}
+function stSync() {
+  for (const [k, grp, , , , fmt] of ST_SLIDERS) {
+    $(`#ss-${k}`).value = st.draft[grp][k];
+    $(`#sv-${k}`).textContent = fmt(st.draft[grp][k]);
+  }
+  $('#ss-auto').checked = st.draft.look.auto;
+  $('#stSwatches').querySelectorAll('.sw').forEach((b) => b.classList.toggle('on', b.dataset.c.toUpperCase() === st.bg.toUpperCase()));
+}
+async function openStudio(p, ph) {
+  if (!ph.cut) return;
+  // The editor works on a draft; nothing changes until Save
+  st = { p, ph, bg: backdrop(), comparing: false, orig: null,
+    draft: { cut: ph.cut, base: ph.base, look: { ...ph.look }, place: { ...ph.place } } };
+  stSync();
+  $('#studio').classList.add('open');
+  stDraw();
+  st.orig = await fileToCanvas(ph.file, 1600);
+}
+function closeStudio() { $('#studio').classList.remove('open'); st = null; }
+
+(function initStudio() {
+  for (const [k, grp, min, max, step] of ST_SLIDERS) {
+    const el = $(`#ss-${k}`);
+    el.min = min; el.max = max; el.step = step;
+    el.oninput = () => { st.draft[grp][k] = parseFloat(el.value); stSync(); stDraw(); };
+    el.ondblclick = () => { st.draft[grp][k] = (grp === 'look' ? Studio.LOOK : Studio.PLACE)[k]; stSync(); stDraw(); };
+  }
+  $('#ss-auto').onchange = (e) => { st.draft.look.auto = e.target.checked; stDraw(); };
+  $('#stSwatches').innerHTML = Studio.BACKDROPS.map((b) => `<button class="sw" data-c="${b.color}" title="${esc(b.name)}" style="background:${b.color}"></button>`).join('');
+  $('#stSwatches').querySelectorAll('.sw').forEach((b) => (b.onclick = () => { st.bg = b.dataset.c; stSync(); stDraw(); }));
+  $('#stReset').onclick = () => { st.draft.look = { ...Studio.LOOK }; st.draft.place = { ...Studio.PLACE }; stSync(); stDraw(); };
+  $('#stCancel').onclick = closeStudio;
+  $('#studio').onclick = (e) => { if (e.target.id === 'studio') closeStudio(); };
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && st) closeStudio(); });
+
+  const cmp = $('#stCompare');
+  cmp.onpointerdown = (e) => { e.preventDefault(); st.comparing = true; cmp.classList.add('on'); stDraw(); };
+  window.addEventListener('pointerup', () => { if (st?.comparing) { st.comparing = false; cmp.classList.remove('on'); stDraw(); } });
+
+  const cv = $('#stCanvas');
+  let drag = null;
+  cv.onpointerdown = (e) => {
+    if (!st || st.comparing) return;
+    drag = { x: e.clientX, y: e.clientY, ox: st.draft.place.offX, oy: st.draft.place.offY, r: cv.getBoundingClientRect() };
+    cv.setPointerCapture(e.pointerId);
+  };
+  cv.onpointermove = (e) => {
+    if (!drag) return;
+    const P = st.draft.place;
+    P.offX = Math.max(-0.25, Math.min(0.25, drag.ox + (e.clientX - drag.x) / drag.r.width));
+    P.offY = Math.max(-0.25, Math.min(0.25, drag.oy + (e.clientY - drag.y) / drag.r.height));
+    stSync(); stDraw();
+  };
+  cv.onpointerup = () => { drag = null; };
+  cv.addEventListener('wheel', (e) => {
+    if (!st) return;
+    e.preventDefault();
+    st.draft.place.scale = Math.max(0.5, Math.min(1.4, st.draft.place.scale * (e.deltaY < 0 ? 1.02 : 0.98)));
+    stSync(); stDraw();
+  }, { passive: false });
+
+  $('#stSave').onclick = async () => {
+    const { p, ph, draft, bg } = st;
+    ph.look = draft.look; ph.place = draft.place; ph.use = 'styled';
+    store.set('hs.look', draft.look); // new cut-outs start from the last look you saved
+    closeStudio();
+    if (bg !== backdrop()) await setBackdrop(bg); else { await recompose(ph); refreshPhoto(p); }
+  };
+  $('#stAll').onclick = async () => {
+    const { p, ph, draft, bg } = st;
+    ph.look = draft.look; ph.place = draft.place; ph.use = 'styled';
+    store.set('hs.look', draft.look);
+    for (const o of p.colours.flatMap((c) => c.photos)) if (o !== ph && o.cut) o.look = { ...draft.look };
+    closeStudio();
+    store.set('hs.backdrop', bg);
+    if ($('#backdrop')) $('#backdrop').value = bg;
+    for (const o of p.colours.flatMap((c) => c.photos)) if (o.cut && o.use === 'styled') await recompose(o);
+    refreshPhoto(p);
+  };
+})();
+
+// ---------- restyle ----------
+async function restyle(p, ph) {
+  if (ph.busy) return;
+  ph.busy = true; ph.error = ''; ph.wait = 'Waiting…';
+  refreshPhoto(p);
+  try {
+    if (styleMode() === 'ai') {
+      ph.wait = 'Reshooting…'; refreshPhoto(p);
+      const image = await blobToB64(await fileToJpeg(ph.file, 1536));
+      const r = await api('/api/restyle', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ image, notes: p.form.notes }),
+      });
+      ph.styledBlob = await toFinal(r.image, r.mimeType);
+      ph.cut = null;
+    } else {
+      ph.styledBlob = await cutout(ph, (msg) => { ph.wait = msg; refreshPhoto(p); });
+    }
+    if (ph.styled) URL.revokeObjectURL(ph.styled);
+    ph.styled = URL.createObjectURL(ph.styledBlob);
+    ph.use = 'styled';
+  } catch (err) {
+    ph.error = err.message;
+  }
+  ph.busy = false;
+  refreshPhoto(p);
+}
+
+async function styleAll(p) {
+  const queue = p.colours.flatMap((c) => c.photos).filter((ph) => ph.include && !ph.styled && !ph.busy);
+  const worker = async () => { while (queue.length) await restyle(p, queue.shift()); };
+  await Promise.all([worker(), worker(), worker()]);
+}
+
+// ---------- stock ----------
+function renderStock(p) {
+  const sizes = sizesOf(p.form);
+  // Stock is keyed by colour folder so renaming a colour keeps its numbers
+  const cell = (c, s) => {
+    const k = `${c.folder}|${s}`;
+    return `<input type="number" min="0" data-k="${esc(k)}" value="${esc(p.form.stock[k] ?? '1')}" placeholder="0">`;
+  };
+  const rows = p.colours.map((c) => `<tr><td>${esc(c.name || 'Stock')}</td>${(sizes.length ? sizes : ['']).map((s) => `<td>${cell(c, s)}</td>`).join('')}</tr>`).join('');
+  $('#stock').innerHTML = `
+    <label>Quantity in stock</label>
+    <table class="stock"><tr><th></th>${(sizes.length ? sizes : ['Qty']).map((s) => `<th>${esc(s)}</th>`).join('')}</tr>${rows}</table>`;
+  $('#stock').querySelectorAll('input').forEach((el) => (el.oninput = () => { p.form.stock[el.dataset.k] = el.value; save(p); }));
+}
+
+// ---------- upload ----------
+function setMsg(html, cls = '') { const m = $('#msg'); m.innerHTML = html; m.className = cls; }
+const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+function problem(p) {
+  const f = p.form;
+  if (!f.title.trim()) return 'Add a title.';
+  if (!(Number(f.price) > 0)) return 'Add a price.';
+  if ((p.colours.length > 1 || p.colours[0].folder) && p.colours.some((c) => !c.name.trim())) return 'Every colour needs a name.';
+  return null;
+}
+
+$('#uploadBtn').onclick = async () => {
+  const p = current;
+  const bad = problem(p);
+  if (bad) return setMsg(bad, 'err');
+  if (p.existing && !confirm(`"${p.form.title}" is already in Shopify. Upload another copy?`)) return;
+  if (p.state === 'done' && !confirm('This product was already uploaded from here. Upload again?')) return;
+  const pending = p.colours.flatMap((c) => c.photos).filter((ph) => ph.include && !ph.styled && ph.use === 'styled');
+  if (pending.length && !confirm(`${pending.length} photo(s) aren't restyled yet. Upload their originals?`)) return;
+
+  $('#uploadBtn').disabled = true;
+  try {
+    const r = await uploadProduct(p, $('#status').value, setMsg);
+    const col = r.collection ? ` · ${r.collection.created ? 'created collection' : 'in collection'} "${esc(r.collection.title)}"` : '';
+    setMsg(`Uploaded${col}. <a href="${esc(r.url)}" target="_blank" rel="noopener">Open in Shopify</a>${r.warnings?.length ? `<br>${r.warnings.map(esc).join('<br>')}` : ''}`, r.warnings?.length ? 'err' : 'ok');
+  } catch (err) {
+    setMsg(err.message, 'err');
+  }
+  $('#uploadBtn').disabled = false;
+};
+
+// Uploads photos then creates the product; returns { url, collection, warnings }
+async function uploadProduct(p, status, onMsg) {
+  const f = p.form;
+  {
+    const colours = [];
+    let n = 0;
+    const total = p.colours.flatMap((c) => c.photos).filter((ph) => ph.include).length;
+    for (const c of p.colours) {
+      const chosen = c.photos.filter((ph) => ph.include);
+      chosen.sort((a, b) => b.cover - a.cover);
+      const images = [];
+      for (const ph of chosen) {
+        onMsg(`Uploading photo ${++n} of ${total}…`);
+        const blob = ph.styled && ph.use === 'styled' ? ph.styledBlob : await fileToJpeg(ph.file, 2048);
+        const filename = `${slug(f.title)}${c.name ? '-' + slug(c.name) : ''}-${images.length + 1}.jpg`;
+        const r = await api('/api/upload', { method: 'POST', headers: { 'content-type': 'image/jpeg', 'x-filename': filename }, body: blob });
+        images.push({ url: r.resourceUrl, filename, alt: [f.title, c.name].filter(Boolean).join(' – ') });
+      }
+      colours.push({ name: p.colours.length > 1 || c.folder ? c.name.trim() : null, images });
+    }
+    onMsg('Creating product…');
+    const sizes = sizesOf(f);
+    const stock = {};
+    for (const c of p.colours) for (const s of sizes.length ? sizes : ['']) {
+      const name = p.colours.length > 1 || c.folder ? c.name.trim() : '';
+      stock[`${name}|${s}`] = Number(f.stock[`${c.folder}|${s}`] ?? 1) || 0;
+    }
+    const r = await api('/api/product', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: f.title, vendor: f.vendor, productType: f.productType,
+        descriptionHtml: f.description.trim() ? f.description.trim().split(/\n{2,}/).map((x) => `<p>${esc(x).replace(/\n/g, '<br>')}</p>`).join('') : '',
+        tags: f.tags.split(',').map((t) => t.trim()).filter(Boolean),
+        status, price: f.price, compareAtPrice: f.compareAtPrice,
+        colours, sizes, stock,
+      }),
+    });
+    p.state = 'done'; p.uploadedUrl = r.url; p.existing = null; p.picked = false;
+    store.set(`hs.done.${p.key}`, r.url);
+    renderList();
+    if (current === p) renderBadge();
+    return r;
+  }
+}
+
+// ---------- bulk upload ----------
+let bulkBusy = false;
+function bulkMsg(html, cls = '') { const m = $('#bulkMsg'); m.innerHTML = html; m.className = `hint ${cls}`; }
+
+$('#bulkBtn').onclick = async () => {
+  const queue = products.filter((p) => p.picked);
+  const status = $('#bulkStatus').value;
+  if (!confirm(`Upload ${queue.length} product(s) ${status === 'ACTIVE' ? 'and publish them' : 'as drafts'}?`)) return;
+  bulkBusy = true; renderList();
+  const failed = [], warned = [], created = new Set();
+  let ok = 0;
+  for (const [i, p] of queue.entries()) {
+    const tag = `${i + 1}/${queue.length} · ${esc(p.name)}`;
+    if (!todo(p)) { p.picked = false; continue; }
+    const bad = problem(p);
+    if (bad) { failed.push(`${esc(p.name)}: ${bad}`); continue; }
+    try {
+      const r = await uploadProduct(p, status, (m) => bulkMsg(`${tag}: ${m}`));
+      if (r.collection?.created) created.add(r.collection.title);
+      warned.push(...(r.warnings || []).map((w) => `${esc(p.name)}: ${esc(w)}`));
+      ok++;
+    } catch (err) {
+      failed.push(`${esc(p.name)}: ${esc(err.message)}`);
+    }
+  }
+  bulkBusy = false; renderList();
+  bulkMsg(`Uploaded ${ok} of ${queue.length}.${created.size ? `<br>New collections: ${[...created].map(esc).join(', ')}` : ''}${warned.length ? `<br>${warned.join('<br>')}` : ''}${failed.length ? `<br>Not uploaded (still selected):<br>${failed.join('<br>')}` : ''}`, failed.length || warned.length ? 'err' : 'ok');
+};
+
+function zoom(src) { const lb = $('#lightbox'); $('img', lb).src = src; lb.classList.add('open'); }
+$('#lightbox').onclick = () => $('#lightbox').classList.remove('open');
+window.addEventListener('beforeunload', (e) => {
+  if (products.some((p) => p.state !== 'done' && p.colours.some((c) => c.photos.some((ph) => ph.styled)))) e.preventDefault();
+});
+</script>
+</body>
+</html>
