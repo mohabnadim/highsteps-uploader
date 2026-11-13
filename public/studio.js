@@ -11,8 +11,12 @@
     { id: 'white', name: 'Pure white', color: '#FFFFFF' },
   ];
   const LOOK = { auto: true, exposure: 0, warmth: 0, contrast: 0, saturation: 0, edge: 0.25, shadow: 1 };
-  const PLACE = { scale: 1, offX: 0, offY: 0 };
+  const PLACE = { scale: 1, offX: 0, offY: 0, rotate: 0, keystone: 0 };
   const OUT = { W: 1600, H: 2000, padding: 0.11 };
+  // Close-up framing matches the reference shoot: the body of the piece fills the frame
+  // (about 84% of the width), sits low with a short floor, and thin straps or chains may
+  // run off the edge. 'full' keeps the whole product inside the frame instead.
+  const FRAMING = { closeup: { bodyW: 0.84, bodyH: 0.6, baseY: 0.86 } };
 
   const grain = (() => {
     const c = document.createElement('canvas');
@@ -65,12 +69,70 @@
     return { canvas: c, base: { x0: bx0 / cw, x1: bx1 / cw } };
   }
 
+  // Perspective (keystone) and straighten (rotate) on the cut-out, then re-trim and measure.
+  // Keystone squeezes or widens the top relative to the bottom, undoing the "looking down"
+  // look of a phone held above the product. Pixels are resampled, never repainted.
+  function geometry(ph) {
+    const P = ph.place, rot = P.rotate || 0, ks = P.keystone || 0;
+    const key = rot + '|' + ks;
+    if (ph._geo && ph._geoKey === key && ph._geoSrc === ph.cut) return ph._geo;
+    let src = ph.cut;
+    if (ks) {
+      const w = src.width, h = src.height, maxF = 1 + Math.abs(ks);
+      const c = document.createElement('canvas');
+      c.width = Math.ceil(w * maxF); c.height = h;
+      const g = c.getContext('2d');
+      g.imageSmoothingQuality = 'high';
+      const step = 2;
+      for (let y = 0; y < h; y += step) {
+        const t = y / (h - 1);              // 0 top .. 1 bottom
+        const f = 1 + ks * (1 - 2 * t);     // ks>0 widens the top, narrows the bottom
+        const dw = w * f;
+        g.drawImage(src, 0, y, w, Math.min(step, h - y), (c.width - dw) / 2, y, dw, Math.min(step, h - y));
+      }
+      src = c;
+    }
+    if (rot) {
+      const a = rot * Math.PI / 180, w = src.width, h = src.height;
+      const cw = Math.ceil(Math.abs(w * Math.cos(a)) + Math.abs(h * Math.sin(a)));
+      const chh = Math.ceil(Math.abs(w * Math.sin(a)) + Math.abs(h * Math.cos(a)));
+      const c = document.createElement('canvas');
+      c.width = cw; c.height = chh;
+      const g = c.getContext('2d');
+      g.imageSmoothingQuality = 'high';
+      g.translate(cw / 2, chh / 2); g.rotate(a); g.drawImage(src, -w / 2, -h / 2);
+      src = c;
+    }
+    const t = (ks || rot) ? trim(src) : { canvas: src, base: ph.base, body: null };
+    if (!t.body) t.body = bodyBox(t.canvas);
+    ph._geo = t; ph._geoKey = key; ph._geoSrc = ph.cut;
+    return t;
+  }
+
+  // The main body of the product, ignoring thin straps and chains, as fractions of the canvas
+  function bodyBox(c) {
+    const w = c.width, h = c.height;
+    const d = c.getContext('2d').getImageData(0, 0, w, h).data;
+    const rows = new Uint32Array(h), cols = new Uint32Array(w);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 128) { rows[y]++; cols[x]++; }
+    const span = (arr) => {
+      let max = 0; for (const v of arr) if (v > max) max = v;
+      const th = max * 0.22; let a = 0, b = arr.length - 1;
+      while (a < b && arr[a] < th) a++;
+      while (b > a && arr[b] < th) b--;
+      return [a, b];
+    };
+    const [y0, y1] = span(rows), [x0, x1] = span(cols);
+    return { x0: x0 / w, x1: (x1 + 1) / w, y0: y0 / h, y1: (y1 + 1) / h };
+  }
+
   // Tone and edge adjustments on the cut-out, cached on the photo object
   function adjusted(ph) {
     const L = ph.look;
     const key = JSON.stringify([L.auto, L.exposure, L.warmth, L.contrast, L.saturation, L.edge]);
-    if (ph._adj && ph._adjKey === key && ph._adjSrc === ph.cut) return ph._adj;
-    const src = ph.cut, w = src.width, h = src.height;
+    const geo = geometry(ph);
+    if (ph._adj && ph._adjKey === key && ph._adjSrc === geo.canvas) return ph._adj;
+    const src = geo.canvas, w = src.width, h = src.height;
     const out = document.createElement('canvas');
     out.width = w; out.height = h;
     const g = out.getContext('2d');
@@ -80,10 +142,11 @@
 
     let lo = 0, hi = 255;
     if (L.auto) {
-      if (!ph._stats || ph._statsSrc !== ph.cut) {
+      if (!ph._stats || ph._statsSrc !== ph.cut) { // stats from the original cut-out
+        const sd = ph.cut.getContext('2d').getImageData(0, 0, ph.cut.width, ph.cut.height).data;
         const hist = new Uint32Array(256); let n = 0;
-        for (let i = 0; i < d.length; i += 4) {
-          if (d[i + 3] > 200) { hist[(d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) | 0]++; n++; }
+        for (let i = 0; i < sd.length; i += 4) {
+          if (sd[i + 3] > 200) { hist[(sd[i] * 0.299 + sd[i + 1] * 0.587 + sd[i + 2] * 0.114) | 0]++; n++; }
         }
         let acc = 0, a = 0, b = 255;
         for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc > n * 0.004) { a = v; break; } }
@@ -116,7 +179,7 @@
       }
     }
     g.putImageData(img, 0, 0);
-    ph._adj = out; ph._adjKey = key; ph._adjSrc = ph.cut;
+    ph._adj = out; ph._adjKey = key; ph._adjSrc = geo.canvas;
     return out;
   }
 
@@ -131,7 +194,7 @@
   }
 
   // ph needs: cut (canvas), base, look, place. Renders into canvas at OUT size.
-  function render(ph, canvas, backdrop) {
+  function render(ph, canvas, backdrop, framing = 'closeup') {
     const W = OUT.W, H = OUT.H;
     canvas.width = W; canvas.height = H;
     const ctx = canvas.getContext('2d');
@@ -153,16 +216,26 @@
       ctx.restore();
     }
 
-    const prod = adjusted(ph), P = ph.place, pad = OUT.padding;
-    const s = Math.min((W * (1 - 2 * pad)) / prod.width, (H * (1 - 2 * pad)) / prod.height) * P.scale;
+    const prod = adjusted(ph), geo = ph._geo, P = ph.place, pad = OUT.padding;
+    let s, x, y;
+    if (framing === 'closeup') {
+      const F = FRAMING.closeup, B = geo.body;
+      const bw = (B.x1 - B.x0) * prod.width, bh = (B.y1 - B.y0) * prod.height;
+      s = Math.min((W * F.bodyW) / bw, (H * F.bodyH) / bh) * P.scale;
+      // centre the body, sit its base low in the frame
+      x = W / 2 - ((B.x0 + B.x1) / 2) * prod.width * s + P.offX * W;
+      y = H * F.baseY - B.y1 * prod.height * s + P.offY * H;
+    } else {
+      s = Math.min((W * (1 - 2 * pad)) / prod.width, (H * (1 - 2 * pad)) / prod.height) * P.scale;
+      x = (W - prod.width * s) / 2 + P.offX * W;
+      y = (H - prod.height * s) / 2 + H * 0.03 + P.offY * H;
+    }
     const dw = prod.width * s, dh = prod.height * s;
-    const x = (W - dw) / 2 + P.offX * W;
-    const y = (H - dh) / 2 + H * 0.03 + P.offY * H;
     const yb = y + dh, st = ph.look.shadow;
 
     if (st > 0) {
       const sc = shade(base, -0.72);
-      const bx0 = x + ph.base.x0 * dw, bx1 = x + ph.base.x1 * dw;
+      const bx0 = x + geo.base.x0 * dw, bx1 = x + geo.base.x1 * dw;
       const bcx = (bx0 + bx1) / 2, bw = Math.max(bx1 - bx0, dw * 0.25);
       const k = Math.min(W, H) / 2000;
       // wide soft pool of shade under the piece
@@ -187,11 +260,11 @@
     ctx.drawImage(prod, x, y, dw, dh);
   }
 
-  function toBlob(ph, backdrop, quality = 0.92) {
+  function toBlob(ph, backdrop, framing, quality = 0.92) {
     const c = document.createElement('canvas');
-    render(ph, c, backdrop);
+    render(ph, c, backdrop, framing);
     return new Promise((res) => c.toBlob(res, 'image/jpeg', quality));
   }
 
-  window.Studio = { BACKDROPS, LOOK, PLACE, OUT, trim, render, toBlob };
+  window.Studio = { BACKDROPS, LOOK, PLACE, OUT, FRAMING, trim, render, toBlob };
 })();

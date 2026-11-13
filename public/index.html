@@ -121,6 +121,9 @@
   .studio .sw { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line); padding: 0; cursor: pointer; }
   .studio .sw.on { outline: 2px solid var(--ink); outline-offset: 2px; }
   .studio .chk { font-size: 13px; margin-bottom: 10px; }
+  .studio .seg { display: flex; gap: 6px; }
+  .studio .seg button { flex: 1; padding: 6px 8px; font-size: 12px; background: transparent; color: var(--ink); }
+  .studio .seg button.on { background: var(--ink); color: #fff; }
   .studio .acts { display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 18px; border-top: 1px solid var(--line); }
   .studio .acts button { flex: 1; padding: 7px 10px; font-size: 13px; }
   .studio #stCompare.on { background: var(--ink); color: #fff; }
@@ -189,10 +192,15 @@
     <div class="side">
       <div class="ctrls">
         <div class="grp"><h4>Backdrop · all photos</h4><div class="swatches" id="stSwatches"></div></div>
+        <div class="grp"><h4>Framing · all photos</h4>
+          <div class="seg" id="stFraming"><button data-v="closeup">Close-up (like the original)</button><button data-v="full">Whole product</button></div>
+        </div>
         <div class="grp"><h4>Placement</h4>
           <div class="row"><div class="lab"><span>Size</span><span id="sv-scale"></span></div><input type="range" id="ss-scale"></div>
           <div class="row"><div class="lab"><span>Left / right</span><span id="sv-offX"></span></div><input type="range" id="ss-offX"></div>
           <div class="row"><div class="lab"><span>Up / down</span><span id="sv-offY"></span></div><input type="range" id="ss-offY"></div>
+          <div class="row"><div class="lab"><span>Straighten</span><span id="sv-rotate"></span></div><input type="range" id="ss-rotate"></div>
+          <div class="row"><div class="lab"><span>Perspective</span><span id="sv-keystone"></span></div><input type="range" id="ss-keystone"></div>
           <div class="row"><div class="lab"><span>Shadow</span><span id="sv-shadow"></span></div><input type="range" id="ss-shadow"></div>
         </div>
         <div class="grp" style="border:0"><h4>Light &amp; colour</h4>
@@ -206,7 +214,7 @@
       </div>
       <div class="acts">
         <button class="ghost" id="stCompare">Hold: original</button>
-        <button class="ghost" id="stAll" title="Copy this light, colour and shadow to every photo of this product">Look → all photos</button>
+        <button class="ghost" id="stAll" title="Copy light, colour, shadow and perspective to every photo of this product">Look → all photos</button>
         <button class="ghost" id="stReset">Reset</button>
       </div>
       <div class="acts" style="border-top:0;padding-top:0">
@@ -423,6 +431,7 @@ function open(p) {
           <option value="cutout">Clean cutout (free)</option>
           ${aiReshoot ? '<option value="ai">AI reshoot (Gemini)</option>' : ''}
         </select>
+        <select id="framing" title="How tight the restyled photos are framed"><option value="closeup">Close-up</option><option value="full">Whole product</option></select>
         <select id="backdrop" title="Backdrop colour for clean cutouts">${Studio.BACKDROPS.map((b) => `<option value="${b.color}">${esc(b.name)}</option>`).join('')}</select>
         <button class="small" id="styleAll">Restyle all</button></h3>
       <div style="margin-bottom:14px" id="notesWrap"><label for="notes">Notes for the AI photographer (optional)</label>
@@ -475,6 +484,8 @@ function open(p) {
   $('#mode').onchange = (e) => { store.set('hs.mode', e.target.value); syncModeUi(); };
   $('#backdrop').value = backdrop();
   $('#backdrop').onchange = (e) => setBackdrop(e.target.value);
+  $('#framing').value = framing();
+  $('#framing').onchange = (e) => setFraming(e.target.value);
   syncModeUi();
   $('#styleAll').onclick = () => styleAll(p);
   renderColours(p);
@@ -582,9 +593,12 @@ async function toFinal(b64, mime) {
 // on the High Steps backdrop with a floor shadow. Product pixels are never repainted.
 // The cut-out is kept on the photo so it can be adjusted later without cutting again.
 const backdrop = () => store.get('hs.backdrop') || Studio.BACKDROPS[0].color;
+// Close-up matches the reference shoot: the piece fills the frame and straps may run off the edge
+const framing = () => store.get('hs.framing') || 'closeup';
 function syncModeUi() {
   $('#notesWrap').hidden = styleMode() !== 'ai';
   $('#backdrop').hidden = styleMode() === 'ai';
+  $('#framing').hidden = styleMode() === 'ai';
 }
 async function cutout(ph, onWait) {
   onWait('Cutting out…');
@@ -602,13 +616,13 @@ async function cutout(ph, onWait) {
   ph.cut = t.canvas; ph.base = t.base;
   ph.look ||= { ...Studio.LOOK, ...(store.get('hs.look') || {}) };
   ph.place ||= { ...Studio.PLACE };
-  return Studio.toBlob(ph, backdrop());
+  return Studio.toBlob(ph, backdrop(), framing());
 }
 
 // Re-render an already cut-out photo after its look, placement or the backdrop changed
 async function recompose(ph) {
   if (!ph.cut) return;
-  ph.styledBlob = await Studio.toBlob(ph, backdrop());
+  ph.styledBlob = await Studio.toBlob(ph, backdrop(), framing());
   if (ph.styled) URL.revokeObjectURL(ph.styled);
   ph.styled = URL.createObjectURL(ph.styledBlob);
 }
@@ -622,11 +636,22 @@ async function setBackdrop(color) {
   refreshPhoto(p);
 }
 
+async function setFraming(v) {
+  store.set('hs.framing', v);
+  if ($('#framing')) $('#framing').value = v;
+  const p = current;
+  if (!p) return;
+  for (const ph of p.colours.flatMap((c) => c.photos)) if (ph.cut && ph.use === 'styled') await recompose(ph);
+  refreshPhoto(p);
+}
+
 // ---------- studio editor ----------
 const ST_SLIDERS = [
   ['scale', 'place', 0.5, 1.4, 0.01, (v) => Math.round(v * 100) + '%'],
   ['offX', 'place', -0.25, 0.25, 0.005, (v) => (v * 100).toFixed(0)],
   ['offY', 'place', -0.25, 0.25, 0.005, (v) => (v * 100).toFixed(0)],
+  ['rotate', 'place', -15, 15, 0.1, (v) => (v > 0 ? '+' : '') + v.toFixed(1) + '°'],
+  ['keystone', 'place', -0.3, 0.3, 0.005, (v) => (v > 0 ? '+' : '') + Math.round(v * 100)],
   ['shadow', 'look', 0, 2, 0.05, (v) => Math.round(v * 100) + '%'],
   ['exposure', 'look', -1, 1, 0.02, (v) => (v > 0 ? '+' : '') + v.toFixed(2)],
   ['warmth', 'look', -1, 1, 0.02, (v) => (v > 0 ? '+' : '') + Math.round(v * 100)],
@@ -643,22 +668,24 @@ function stDraw() {
     if (st.comparing && st.orig) {
       cv.width = st.orig.width; cv.height = st.orig.height;
       cv.getContext('2d').drawImage(st.orig, 0, 0);
-    } else Studio.render(st.draft, cv, st.bg);
+    } else Studio.render(st.draft, cv, st.bg, st.framing);
   });
 }
 function stSync() {
   for (const [k, grp, , , , fmt] of ST_SLIDERS) {
-    $(`#ss-${k}`).value = st.draft[grp][k];
-    $(`#sv-${k}`).textContent = fmt(st.draft[grp][k]);
+    const v = st.draft[grp][k] ?? (grp === 'look' ? Studio.LOOK : Studio.PLACE)[k];
+    $(`#ss-${k}`).value = v;
+    $(`#sv-${k}`).textContent = fmt(v);
   }
   $('#ss-auto').checked = st.draft.look.auto;
   $('#stSwatches').querySelectorAll('.sw').forEach((b) => b.classList.toggle('on', b.dataset.c.toUpperCase() === st.bg.toUpperCase()));
+  $('#stFraming').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === st.framing));
 }
 async function openStudio(p, ph) {
   if (!ph.cut) return;
   // The editor works on a draft; nothing changes until Save
-  st = { p, ph, bg: backdrop(), comparing: false, orig: null,
-    draft: { cut: ph.cut, base: ph.base, look: { ...ph.look }, place: { ...ph.place } } };
+  st = { p, ph, bg: backdrop(), framing: framing(), comparing: false, orig: null,
+    draft: { cut: ph.cut, base: ph.base, look: { ...ph.look }, place: { ...Studio.PLACE, ...ph.place } } };
   stSync();
   $('#studio').classList.add('open');
   stDraw();
@@ -677,6 +704,7 @@ function closeStudio() { $('#studio').classList.remove('open'); st = null; }
   $('#stSwatches').innerHTML = Studio.BACKDROPS.map((b) => `<button class="sw" data-c="${b.color}" title="${esc(b.name)}" style="background:${b.color}"></button>`).join('');
   $('#stSwatches').querySelectorAll('.sw').forEach((b) => (b.onclick = () => { st.bg = b.dataset.c; stSync(); stDraw(); }));
   $('#stReset').onclick = () => { st.draft.look = { ...Studio.LOOK }; st.draft.place = { ...Studio.PLACE }; stSync(); stDraw(); };
+  $('#stFraming').querySelectorAll('button').forEach((b) => (b.onclick = () => { st.framing = b.dataset.v; stSync(); stDraw(); }));
   $('#stCancel').onclick = closeStudio;
   $('#studio').onclick = (e) => { if (e.target.id === 'studio') closeStudio(); };
   window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && st) closeStudio(); });
@@ -708,19 +736,27 @@ function closeStudio() { $('#studio').classList.remove('open'); st = null; }
   }, { passive: false });
 
   $('#stSave').onclick = async () => {
-    const { p, ph, draft, bg } = st;
+    const { p, ph, draft, bg, framing: fr } = st;
     ph.look = draft.look; ph.place = draft.place; ph.use = 'styled';
     store.set('hs.look', draft.look); // new cut-outs start from the last look you saved
     closeStudio();
-    if (bg !== backdrop()) await setBackdrop(bg); else { await recompose(ph); refreshPhoto(p); }
+    if (fr !== framing()) store.set('hs.framing', fr), $('#framing') && ($('#framing').value = fr);
+    if (bg !== backdrop() || fr !== framing()) await setBackdrop(bg); else { await recompose(ph); refreshPhoto(p); }
   };
   $('#stAll').onclick = async () => {
-    const { p, ph, draft, bg } = st;
+    const { p, ph, draft, bg, framing: fr } = st;
     ph.look = draft.look; ph.place = draft.place; ph.use = 'styled';
     store.set('hs.look', draft.look);
-    for (const o of p.colours.flatMap((c) => c.photos)) if (o !== ph && o.cut) o.look = { ...draft.look };
+    // Same light and colour everywhere; same perspective correction too, since one shoot
+    // is usually taken from the same height. Size, position and straighten stay per photo.
+    for (const o of p.colours.flatMap((c) => c.photos)) if (o !== ph && o.cut) {
+      o.look = { ...draft.look };
+      o.place = { ...Studio.PLACE, ...o.place, keystone: draft.place.keystone };
+    }
     closeStudio();
     store.set('hs.backdrop', bg);
+    store.set('hs.framing', fr);
+    if ($('#framing')) $('#framing').value = fr;
     if ($('#backdrop')) $('#backdrop').value = bg;
     for (const o of p.colours.flatMap((c) => c.photos)) if (o.cut && o.use === 'styled') await recompose(o);
     refreshPhoto(p);
