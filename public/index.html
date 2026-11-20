@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>High Steps Uploader</title>
 <style>
   :root {
@@ -127,7 +127,43 @@
   .studio .acts { display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 18px; border-top: 1px solid var(--line); }
   .studio .acts button { flex: 1; padding: 7px 10px; font-size: 13px; }
   .studio #stCompare.on { background: var(--ink); color: #fff; }
-  @media (max-width: 860px) { .studio .box { grid-template-columns: 1fr; grid-template-rows: 55% 45%; } }
+
+  /* ---------- phones & tablets ---------- */
+  .back { display: none; }
+  @media (max-width: 860px) {
+    /* one screen at a time: product list, then the product */
+    #app.on.has-product aside { display: none; }
+    #app.on:not(.has-product) main { display: none; }
+    aside { max-height: none; border-right: 0; }
+    .list { overflow: visible; }
+    .back { display: inline-flex; align-items: center; gap: 6px; background: transparent; color: var(--ink); border: 0; padding: 0 0 12px; font-size: 14px; }
+    main { padding: 18px 14px calc(110px + env(safe-area-inset-bottom)); }
+    .card { padding: 14px; border-radius: 10px; }
+    .card > h3 .sp { flex-basis: 100%; height: 0; }
+    .card > h3 select { flex: 1 1 120px; }
+    .card > h3 #styleAll { flex: 1 1 100%; padding: 8px; }
+    .photos { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .ph .ctl button { flex: 1 1 45%; }
+    .footer { left: 0; padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); gap: 8px; }
+    .footer select { flex: 1; } .footer #uploadBtn { flex: 1.4; }
+    #msg { flex-basis: 100%; min-width: 0; order: 3; }
+    input, select, textarea { font-size: 16px; } /* stops iOS zooming into fields */
+    .item { padding: 11px 16px; }
+    /* photo editor: full screen, photo on top, controls scroll, actions pinned */
+    .studio { padding: 0; }
+    .studio .box { width: 100%; height: 100%; height: 100dvh; border-radius: 0; grid-template-columns: 1fr; grid-template-rows: minmax(0, 46%) minmax(0, 1fr); }
+    .studio .stage { padding: 12px 12px 26px; }
+    .studio .side { border-left: 0; border-top: 1px solid var(--line); min-height: 0; }
+    .studio .ctrls { padding: 14px 16px; }
+    .studio .acts { padding: 8px 12px; gap: 6px; flex-wrap: nowrap; }
+    .studio .acts:last-child { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+    .studio .acts button { padding: 8px 6px; font-size: 12px; white-space: nowrap; }
+    .studio input[type=range] { height: 28px; }
+    .studio .sw { width: 36px; height: 36px; }
+  }
+  @media (max-width: 380px) { .photos { gap: 6px; } .ph .ctl button { font-size: 11px; padding: 3px 4px; } }
+  @media (hover: none) { .hint-desktop { display: none; } }
+  @media (hover: hover) { .hint-touch { display: none; } }
 </style>
 </head>
 <body>
@@ -187,7 +223,7 @@
   <div class="box">
     <div class="stage">
       <canvas id="stCanvas"></canvas>
-      <div class="hint">Drag to move · scroll to resize · double-click a slider to reset it</div>
+      <div class="hint"><span class="hint-desktop">Drag to move · scroll to resize · double-click a slider to reset it</span><span class="hint-touch">Drag to move · pinch to resize</span></div>
     </div>
     <div class="side">
       <div class="ctrls">
@@ -320,7 +356,8 @@ function loadFolder(files) {
   $('#bulk').hidden = false;
   renderList();
   current = null;
-  $('#main').innerHTML = `<p class="empty">${products.length} products found. Pick one on the left.</p>`;
+  $('#main').innerHTML = `<p class="empty">${products.length} products found. Pick one from the list.</p>`;
+  $('#app').classList.remove('has-product');
   $('#footer').hidden = true;
   checkExisting();
 }
@@ -420,8 +457,11 @@ const styleMode = () => (aiReshoot && store.get('hs.mode') === 'ai' ? 'ai' : 'cu
 function open(p) {
   current = p;
   renderList();
+  $('#app').classList.add('has-product');
+  window.scrollTo(0, 0);
   const f = p.form;
   $('#main').innerHTML = `
+    <button class="back" id="backBtn">← All products</button>
     <div class="head"><h2>${esc(p.name)}</h2><span id="badge"></span></div>
     <div class="hint">${esc(p.category)} · ${p.colours.reduce((n, c) => n + c.photos.length, 0)} photos${p.colours.length > 1 ? ` · ${p.colours.length} colours` : ''}</div>
 
@@ -488,6 +528,7 @@ function open(p) {
   $('#framing').onchange = (e) => setFraming(e.target.value);
   syncModeUi();
   $('#styleAll').onclick = () => styleAll(p);
+  $('#backBtn').onclick = () => { $('#app').classList.remove('has-product'); $('#footer').hidden = true; current = null; renderList(); };
   renderColours(p);
   renderStock(p);
   renderBadge();
@@ -728,6 +769,21 @@ function closeStudio() { $('#studio').classList.remove('open'); st = null; }
     stSync(); stDraw();
   };
   cv.onpointerup = () => { drag = null; };
+  // Two-finger pinch resizes on touch screens
+  const touches = new Map();
+  let pinch = null;
+  cv.addEventListener('pointerdown', (e) => { touches.set(e.pointerId, e); if (touches.size === 2 && st) { const [a, b] = [...touches.values()]; pinch = { d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), s: st.draft.place.scale }; drag = null; } });
+  cv.addEventListener('pointermove', (e) => {
+    if (!touches.has(e.pointerId)) return;
+    touches.set(e.pointerId, e);
+    if (pinch && touches.size === 2) {
+      const [a, b] = [...touches.values()];
+      st.draft.place.scale = Math.max(0.5, Math.min(1.4, pinch.s * Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) / pinch.d));
+      stSync(); stDraw();
+    }
+  });
+  const endTouch = (e) => { touches.delete(e.pointerId); if (touches.size < 2) pinch = null; };
+  cv.addEventListener('pointerup', endTouch); cv.addEventListener('pointercancel', endTouch);
   cv.addEventListener('wheel', (e) => {
     if (!st) return;
     e.preventDefault();
