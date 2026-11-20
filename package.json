@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "build": "echo \"No build step: static files in public/, worker in src/\""
   },
   "devDependencies": {
     "wrangler": "4.152.0"
